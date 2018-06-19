@@ -1690,6 +1690,13 @@ class Block(PandasObject):
                               placement=np.arange(len(result)),
                               ndim=ndim)
 
+    def _coerce_replace(self, mask=None, dst=None, convert=False):
+        if mask.any():
+            self = self.coerce_to_target_dtype(dst)
+            return self.putmask(mask, dst, inplace=True)
+        else:
+            return self
+
 
 class ScalarBlock(Block):
     """
@@ -2538,9 +2545,14 @@ class ObjectBlock(Block):
         block = self.make_block(new_values)
         if convert:
             block = block.convert(by_item=True, numeric=False)
-
         return block
 
+    def _coerce_replace(self, mask=None, dst=None, convert=False):
+        block = super(ObjectBlock, self)._coerce_replace(mask, dst)
+        if convert:
+            block = [b.convert(by_item=True, numeric=False, copy=True)
+                     for b in block]
+        return block
 
 class CategoricalBlock(ExtensionBlock):
     __slots__ = ()
@@ -3779,18 +3791,11 @@ class BlockManager(PandasObject):
                                 new_rb.append(b)
                     else:
                         m = masks[i][b.mgr_locs.indexer]
+                        convert = i == src_len
+                        result = b._coerce_replace(mask=m, dst=d,
+                                                   convert=convert)
                         if m.any():
-                            if b.dtype == np.object:
-                                result = b.putmask(m, d, inplace=True)
-                                if i == src_len:
-                                    result = [b.convert(by_item=True,
-                                                        numeric=False,
-                                                        copy=True)
-                                              for b in result]
-                                new_rb = _extend_blocks(result, new_rb)
-                            else:
-                                b = b.coerce_to_target_dtype(d)
-                                new_rb.extend(b.putmask(m, d, inplace=True))
+                            new_rb = _extend_blocks(result, new_rb)
                         else:
                             new_rb.append(b)
                 rb = new_rb
