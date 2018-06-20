@@ -2548,11 +2548,14 @@ class ObjectBlock(Block):
         return block
 
     def _coerce_replace(self, mask=None, dst=None, convert=False):
-        block = super(ObjectBlock, self)._coerce_replace(mask, dst)
-        if convert:
-            block = [b.convert(by_item=True, numeric=False, copy=True)
-                     for b in block]
-        return block
+        if mask.any():
+            block = super(ObjectBlock, self)._coerce_replace(mask, dst)
+            if convert:
+                block = [b.convert(by_item=True, numeric=False, copy=True)
+                         for b in block]
+            return block
+        else:
+            return self
 
 class CategoricalBlock(ExtensionBlock):
     __slots__ = ()
