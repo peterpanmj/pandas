@@ -1690,12 +1690,28 @@ class Block(PandasObject):
                               placement=np.arange(len(result)),
                               ndim=ndim)
 
-    def _coerce_replace(self, mask=None, dst=None, convert=False):
+    def _replace_coerce(self, mask=None, dst=None, convert=False):
+        """
+        Replace value corresponding to the given boolean array with another
+        value.
+
+        Parameters
+        ----------
+        mask : array_like of bool
+            The mask of values to replace.
+        dst : object
+            The value to be replaced with.
+        convert : bool
+            It is used in ObjectBlocks. It is here for API compatibility.
+
+        Returns
+        -------
+        A new block if there is anything to replace or the original block.
+        """
         if mask.any():
             self = self.coerce_to_target_dtype(dst)
             return self.putmask(mask, dst, inplace=True)
-        else:
-            return self
+        return self
 
 
 class ScalarBlock(Block):
@@ -2547,15 +2563,32 @@ class ObjectBlock(Block):
             block = block.convert(by_item=True, numeric=False)
         return block
 
-    def _coerce_replace(self, mask=None, dst=None, convert=False):
+    def _replace_coerce(self, mask=None, dst=None, convert=False):
+        """
+        Replace value corresponding to the given boolean array with another
+        value.
+
+        Parameters
+        ----------
+        mask : array_like of bool
+            The mask of values to replace.
+        dst : object
+            The value to be replaced with.
+        convert : bool
+            If true, try to coerce any object types to better types.
+
+        Returns
+        -------
+        A new block if there is anything to replace or the original block.
+        """
         if mask.any():
-            block = super(ObjectBlock, self)._coerce_replace(mask, dst)
+            block = super(ObjectBlock, self)._replace_coerce(mask, dst)
             if convert:
                 block = [b.convert(by_item=True, numeric=False, copy=True)
                          for b in block]
             return block
-        else:
-            return self
+        return self
+
 
 class CategoricalBlock(ExtensionBlock):
     __slots__ = ()
@@ -3748,15 +3781,17 @@ class BlockManager(PandasObject):
 
         # only support equality comparision, regex comparision support
         # is needed in the future
-        def comp(s):
+        def comp(s, reg=False):
             if isna(s):
                 return isna(values)
             if hasattr(s, 'asm8'):
                 return _maybe_compare(maybe_convert_objects(values),
-                                      getattr(s, 'asm8'), operator.eq)
-            return _maybe_compare(values, s, operator.eq)
+                                      getattr(s, 'asm8'), reg)
+            if reg and is_re_compilable(s):
+                return _maybe_compare(values, s, reg)
+            return _maybe_compare(values, s, reg)
 
-        masks = [comp(s) for i, s in enumerate(src_list)]
+        masks = [comp(s, regex) for i, s in enumerate(src_list)]
 
         result_blocks = []
         src_len = len(src_list) - 1
@@ -3776,31 +3811,33 @@ class BlockManager(PandasObject):
                     # src_list: [r'a*', r'b*'], dest_list: ['b', 'a']
                     # result will be ['b', b'] after searching for pattern r'a'
                     # and then changed to ['a', 'a'] for pattern r'b*'
-                    if regex:
-                        if b.dtype == np.object_:
-                            convert = i == src_len
-                            result = b.replace(s, d, inplace=inplace,
-                                               regex=regex,
-                                               mgr=mgr, convert=convert)
-                            new_rb = _extend_blocks(result, new_rb)
-                        else:
-                            # get our mask for this element, sized to this
-                            # particular block
-                            m = masks[i][b.mgr_locs.indexer]
-                            if m.any():
-                                b = b.coerce_to_target_dtype(d)
-                                new_rb.extend(b.putmask(m, d, inplace=True))
-                            else:
-                                new_rb.append(b)
+# =============================================================================
+#                     if regex:
+#                         if is_object_dtype(b.dtype):
+#                             convert = i == src_len
+#                             result = b.replace(s, d, inplace=inplace,
+#                                                regex=regex,
+#                                                mgr=mgr, convert=convert)
+#                             new_rb = _extend_blocks(result, new_rb)
+#                         else:
+#                             # get our mask for this element, sized to this
+#                             # particular block
+#                             m = masks[i][b.mgr_locs.indexer]
+#                             if m.any():
+#                                 b = b.coerce_to_target_dtype(d)
+#                                 new_rb.extend(b.putmask(m, d, inplace=True))
+#                             else:
+#                                 new_rb.append(b)
+#                     else:
+# =============================================================================
+                    m = masks[i][b.mgr_locs.indexer]
+                    convert = i == src_len
+                    result = b._replace_coerce(mask=m, dst=d,
+                                               convert=convert)
+                    if m.any():
+                        new_rb = _extend_blocks(result, new_rb)
                     else:
-                        m = masks[i][b.mgr_locs.indexer]
-                        convert = i == src_len
-                        result = b._coerce_replace(mask=m, dst=d,
-                                                   convert=convert)
-                        if m.any():
-                            new_rb = _extend_blocks(result, new_rb)
-                        else:
-                            new_rb.append(b)
+                        new_rb.append(b)
                 rb = new_rb
             result_blocks.extend(rb)
 
@@ -5174,7 +5211,12 @@ def _vstack(to_stack, dtype):
         return np.vstack(to_stack)
 
 
-def _maybe_compare(a, b, op):
+def _maybe_compare(a, b, regex=False):
+    if not regex:
+        op = np.vectorize(lambda x: operator.eq(x, b))
+    else:
+        op = np.vectorize(lambda x: bool(re.match(b, x)) if isinstance(x,str)
+                          else False)
 
     is_a_array = isinstance(a, np.ndarray)
     is_b_array = isinstance(b, np.ndarray)
@@ -5186,9 +5228,8 @@ def _maybe_compare(a, b, op):
     # numpy deprecation warning if comparing numeric vs string-like
     elif is_numeric_v_string_like(a, b):
         result = False
-
     else:
-        result = op(a, b)
+        result = op(a)
 
     if is_scalar(result) and (is_a_array or is_b_array):
         type_names = [type(a).__name__, type(b).__name__]
