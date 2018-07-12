@@ -1690,7 +1690,8 @@ class Block(PandasObject):
                               placement=np.arange(len(result)),
                               ndim=ndim)
 
-    def _replace_coerce(self, mask=None, dst=None, convert=False):
+    def _replace_coerce(self, mask=None, src=None, dst=None, inplace=True,
+                        convert=False, regex=False, mgr=None):
         """
         Replace value corresponding to the given boolean array with another
         value.
@@ -1709,8 +1710,15 @@ class Block(PandasObject):
         A new block if there is anything to replace or the original block.
         """
         if mask.any():
-            self = self.coerce_to_target_dtype(dst)
-            return self.putmask(mask, dst, inplace=True)
+            if not regex:
+                self = self.coerce_to_target_dtype(dst)
+                return self.putmask(mask, dst, inplace=True)
+            else:
+                return self._replace_single(src, dst, inplace=inplace,
+                                            regex=regex,
+                                            convert=convert,
+                                            mask=mask,
+                                            mgr=mgr)
         return self
 
 
@@ -2488,7 +2496,7 @@ class ObjectBlock(Block):
                                     regex=regex, mgr=mgr)
 
     def _replace_single(self, to_replace, value, inplace=False, filter=None,
-                        regex=False, convert=True, mgr=None):
+                        regex=False, convert=True, mgr=None, mask=None):
 
         inplace = validate_bool_kwarg(inplace, 'inplace')
 
@@ -2555,7 +2563,7 @@ class ObjectBlock(Block):
         else:
             filt = self.mgr_locs.isin(filter).nonzero()[0]
 
-        new_values[filt] = f(new_values[filt])
+        new_values[filt][mask] = f(new_values[filt][mask])
 
         # convert
         block = self.make_block(new_values)
@@ -2563,7 +2571,8 @@ class ObjectBlock(Block):
             block = block.convert(by_item=True, numeric=False)
         return block
 
-    def _replace_coerce(self, mask=None, dst=None, convert=False):
+    def _replace_coerce(self, mask=None, src=None, dst=None, inplace=True,
+                        convert=False, regex=False, mgr=None):
         """
         Replace value corresponding to the given boolean array with another
         value.
@@ -2582,7 +2591,12 @@ class ObjectBlock(Block):
         A new block if there is anything to replace or the original block.
         """
         if mask.any():
-            block = super(ObjectBlock, self)._replace_coerce(mask, dst)
+            block = super(ObjectBlock, self)._replace_coerce(mask=mask,
+                                                             dst=dst,
+                                                             inplace=inplace,
+                                                             convert=convert,
+                                                             regex=regex,
+                                                             mgr=mgr)
             if convert:
                 block = [b.convert(by_item=True, numeric=False, copy=True)
                          for b in block]
@@ -3832,8 +3846,9 @@ class BlockManager(PandasObject):
 # =============================================================================
                     m = masks[i][b.mgr_locs.indexer]
                     convert = i == src_len
-                    result = b._replace_coerce(mask=m, dst=d,
-                                               convert=convert)
+                    result = b._replace_coerce(mask=m, dst=d, inplace=inplace,
+                                               convert=convert, regex=regex, 
+                                               mgr=mgr)
                     if m.any():
                         new_rb = _extend_blocks(result, new_rb)
                     else:
