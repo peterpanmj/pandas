@@ -2592,6 +2592,7 @@ class ObjectBlock(Block):
         """
         if mask.any():
             block = super(ObjectBlock, self)._replace_coerce(mask=mask,
+                                                             src=src,
                                                              dst=dst,
                                                              inplace=inplace,
                                                              convert=convert,
@@ -3846,8 +3847,9 @@ class BlockManager(PandasObject):
 # =============================================================================
                     m = masks[i][b.mgr_locs.indexer]
                     convert = i == src_len
-                    result = b._replace_coerce(mask=m, dst=d, inplace=inplace,
-                                               convert=convert, regex=regex, 
+                    result = b._replace_coerce(mask=m, src=s, dst=d,
+                                               inplace=inplace,
+                                               convert=convert, regex=regex,
                                                mgr=mgr)
                     if m.any():
                         new_rb = _extend_blocks(result, new_rb)
