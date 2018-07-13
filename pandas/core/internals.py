@@ -1712,7 +1712,7 @@ class Block(PandasObject):
         if mask.any():
             if not regex:
                 self = self.coerce_to_target_dtype(dst)
-                return self.putmask(mask, dst, inplace=True)
+                return self.putmask(mask, dst, inplace=inplace)
             else:
                 return self._replace_single(src, dst, inplace=inplace,
                                             regex=regex,
@@ -2563,7 +2563,10 @@ class ObjectBlock(Block):
         else:
             filt = self.mgr_locs.isin(filter).nonzero()[0]
 
-        new_values[filt][mask] = f(new_values[filt][mask])
+        if mask is None:
+            new_values[filt] = f(new_values[filt])
+        else:
+            new_values[filt][mask] = f(new_values[filt][mask])
 
         # convert
         block = self.make_block(new_values)
