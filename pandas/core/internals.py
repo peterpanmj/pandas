@@ -1700,15 +1700,22 @@ class Block(PandasObject):
         ----------
         mask : array_like of bool
             The mask of values to replace.
+        src : object
+            The value to replace. It is ignored if regex is False.
         dst : object
             The value to be replaced with.
         convert : bool
-            It is used in ObjectBlocks. It is here for API compatibility.
+            If true, try to coerce any object types to better types.
+        regex : bool
+            If true, search for element matching with the pattern in src.
+            Masked element is ignored.
+        mgr : BlockPlacement, optional
 
         Returns
         -------
         A new block if there is anything to replace or the original block.
         """
+
         if mask.any():
             if not regex:
                 self = self.coerce_to_target_dtype(dst)
@@ -2584,10 +2591,16 @@ class ObjectBlock(Block):
         ----------
         mask : array_like of bool
             The mask of values to replace.
+        src : object
+            The value to replace. It is ignored if regex is False.
         dst : object
             The value to be replaced with.
         convert : bool
             If true, try to coerce any object types to better types.
+        regex : bool
+            If true, search for element matching with the pattern in src.
+            Masked element is ignored.
+        mgr : BlockPlacement, optional
 
         Returns
         -------
@@ -3797,8 +3810,6 @@ class BlockManager(PandasObject):
         # figure out our mask a-priori to avoid repeated replacements
         values = self.as_array()
 
-        # only support equality comparision, regex comparision support
-        # is needed in the future
         def comp(s, reg=False):
             if isna(s):
                 return isna(values)
@@ -3821,33 +3832,6 @@ class BlockManager(PandasObject):
             for i, (s, d) in enumerate(zip(src_list, dest_list)):
                 new_rb = []
                 for b in rb:
-                    # regular expression support needs to be improved.
-                    # If the replacement for the previous pattern
-                    # matches the next pattern, the value will be replaced
-                    # again with a different value from dest_list
-                    # i.e. when values is ['a', 'b']
-                    # src_list: [r'a*', r'b*'], dest_list: ['b', 'a']
-                    # result will be ['b', b'] after searching for pattern r'a'
-                    # and then changed to ['a', 'a'] for pattern r'b*'
-# =============================================================================
-#                     if regex:
-#                         if is_object_dtype(b.dtype):
-#                             convert = i == src_len
-#                             result = b.replace(s, d, inplace=inplace,
-#                                                regex=regex,
-#                                                mgr=mgr, convert=convert)
-#                             new_rb = _extend_blocks(result, new_rb)
-#                         else:
-#                             # get our mask for this element, sized to this
-#                             # particular block
-#                             m = masks[i][b.mgr_locs.indexer]
-#                             if m.any():
-#                                 b = b.coerce_to_target_dtype(d)
-#                                 new_rb.extend(b.putmask(m, d, inplace=True))
-#                             else:
-#                                 new_rb.append(b)
-#                     else:
-# =============================================================================
                     m = masks[i][b.mgr_locs.indexer]
                     convert = i == src_len
                     result = b._replace_coerce(mask=m, src=s, dst=d,
