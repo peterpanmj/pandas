@@ -5233,9 +5233,9 @@ def _vstack(to_stack, dtype):
 
 def _maybe_compare(a, b, regex=False):
     if not regex:
-        op = np.vectorize(lambda x: operator.eq(x, b))
+        op = lambda x: operator.eq(x, b)
     else:
-        op = np.vectorize(lambda x: bool(re.match(b, x)) if isinstance(x,str)
+        op = np.vectorize(lambda x: bool(re.match(b, x)) if isinstance(x, str)
                           else False)
 
     is_a_array = isinstance(a, np.ndarray)
