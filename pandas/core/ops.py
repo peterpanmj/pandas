@@ -1170,21 +1170,26 @@ def dispatch_to_extension_op(op, left, right):
     # we need to listify to avoid ndarray, or non-same-type extension array
     # dispatching
 
+    new_type = left_type = right_type = None
     if is_extension_array_dtype(left):
 
+        left_type = left.dtype.type
         new_left = left.values
         if isinstance(right, np.ndarray):
 
             # handle numpy scalars, this is a PITA
             # TODO(jreback)
             new_right = lib.item_from_zerodim(right)
+            right_type = new_right.dtype
             if is_scalar(new_right):
                 new_right = [new_right]
             new_right = list(new_right)
         elif is_extension_array_dtype(right) and type(left) != type(right):
+            right_type = new_right.dtype.type
             new_right = list(new_right)
         else:
             new_right = right
+            right_type = type(right)
 
     else:
 
@@ -1193,12 +1198,17 @@ def dispatch_to_extension_op(op, left, right):
 
     res_values = op(new_left, new_right)
     res_name = get_op_result_name(left, right)
-
+    if right_type and left_type:
+        new_type = find_common_type([right_type, left_type])
     if op.__name__ == 'divmod':
         return _construct_divmod_result(
             left, res_values, left.index, res_name)
 
-    return _construct_result(left, res_values, left.index, res_name)
+    result = _construct_result(left, res_values, left.index, res_name)
+    if is_object_dtype(result.dtype):
+        result = _construct_result(left, res_values, left.index, res_name,
+                                   new_type)
+    return result
 
 
 def _arith_method_SERIES(cls, op, special):
