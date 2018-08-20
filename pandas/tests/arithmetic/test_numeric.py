@@ -870,3 +870,25 @@ class TestObjectDtypeEquivalence(object):
         result = op(1., arr)
         expected = op(1., arr.astype(float))
         tm.assert_series_equal(result.astype(float), expected)
+
+
+class TestReverseOperatorSeriesWithScalar(object):
+    # GH22024
+
+    @pytest.mark.parametrize('dtype', ['int64', 'int32', 'int16', 'int8',
+                                       'float64', 'float32', 'float16',
+                                       'uint64', 'uint32', 'uint16', 'uint8'])
+    @pytest.mark.parametrize('op_pairs', [(operator.add, ops.radd),
+                                          (operator.mul, ops.rmul),
+                                          (operator.sub, ops.rsub),
+                                          (operator.truediv, ops.rdiv),
+                                          (operator.truediv, ops.rtruediv),
+                                          (operator.floordiv, ops.rfloordiv),
+                                          (operator.mod, ops.rmod),
+                                          (operator.pow, ops.rpow)])
+    def test_series_with_scalar(self, dtype, op_pairs):
+        ser = pd.Series(np.random.randint(1, 11, 10)).astype(dtype)
+        scalar = ser.iloc[0]
+        op_std, op_rev = op_pairs
+        tm.assert_series_equal(op_std(ser, scalar), op_rev(scalar, ser))
+        assert op_std(ser, scalar).dtype == op_rev(scalar, ser).dtype
