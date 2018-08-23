@@ -879,13 +879,12 @@ class TestReverseOperatorSeriesWithScalar(object):
     @pytest.mark.parametrize('op_pairs', [(operator.add, ops.radd),
                                           (operator.mul, ops.rmul),
                                           (operator.sub, ops.rsub),
-                                          (operator.truediv, ops.rdiv),
-                                          (operator.truediv, ops.rtruediv),
                                           (operator.floordiv, ops.rfloordiv),
-                                          (operator.mod, ops.rmod),
-                                          (operator.pow, ops.rpow)])
+                                          (operator.mod, ops.rmod)])
     def test_series_with_scalar(self, dtype, op_pairs):
         ser = pd.Series(np.random.randint(1, 11, 10), dtype=dtype)
         scalar = ser[0]
         op1, op2 = op_pairs
-        tm.assert_series_equal(op1(ser, scalar), op2(ser, scalar))
+        assert op1(ser, scalar).dtype == dtype
+        assert op2(ser, scalar).dtype == dtype
+
