@@ -1173,6 +1173,7 @@ def dispatch_to_extension_op(op, left, right):
     if is_extension_array_dtype(left):
 
         new_left = left.values
+        res_values = None
         if isinstance(right, np.ndarray):
 
             # handle numpy scalars, this is a PITA
@@ -1196,11 +1197,11 @@ def dispatch_to_extension_op(op, left, right):
             op = getattr(new_right, "__" + op.__name__ + "__")
             res_values = op(new_left)
 
-    if not res_values:
+    if res_values is None:
         res_values = op(new_left, new_right)
     res_name = get_op_result_name(left, right)
 
-    if op.__name__ == 'divmod':
+    if op.__name__ == 'divmod' or op.__name__ == '__divmod__':
         return _construct_divmod_result(
             left, res_values, left.index, res_name)
 
