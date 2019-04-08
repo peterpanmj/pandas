@@ -936,7 +936,8 @@ class _Rolling_and_Expanding(_Rolling):
         results = []
         for b in blocks:
             result = b.notna().astype(int)
-            result = self._constructor(result, window=window, min_periods=0,
+            result = self._constructor(result, window=window,
+                                       min_periods=self.min_periods,
                                        center=self.center,
                                        closed=self.closed).sum()
             results.append(result)
