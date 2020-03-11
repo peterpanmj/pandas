@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 import pandas as pd
-import pandas.util.testing as tm
+import pandas._testing as tm
 
 from .common import Base
 
@@ -36,15 +36,15 @@ class DatetimeLike(Base):
         # test the string repr
         idx = self.create_index()
         idx.name = "foo"
-        assert not "length={}".format(len(idx)) in str(idx)
+        assert not (f"length={len(idx)}" in str(idx))
         assert "'foo'" in str(idx)
-        assert idx.__class__.__name__ in str(idx)
+        assert type(idx).__name__ in str(idx)
 
         if hasattr(idx, "tz"):
             if idx.tz is not None:
                 assert idx.tz in str(idx)
         if hasattr(idx, "freq"):
-            assert "freq='{idx.freqstr}'".format(idx=idx) in str(idx)
+            assert f"freq='{idx.freqstr}'" in str(idx)
 
     def test_view(self):
         i = self.create_index()
@@ -72,7 +72,7 @@ class DatetimeLike(Base):
         "mapper",
         [
             lambda values, index: {i: e for e, i in zip(values, index)},
-            lambda values, index: pd.Series(values, index),
+            lambda values, index: pd.Series(values, index, dtype=object),
         ],
     )
     def test_map_dictlike(self, mapper):
@@ -81,7 +81,7 @@ class DatetimeLike(Base):
 
         # don't compare the freqs
         if isinstance(expected, pd.DatetimeIndex):
-            expected.freq = None
+            expected._data.freq = None
 
         result = index.map(mapper(expected, index))
         tm.assert_index_equal(result, expected)
@@ -95,10 +95,3 @@ class DatetimeLike(Base):
         expected = pd.Index([np.nan] * len(index))
         result = index.map(mapper([], []))
         tm.assert_index_equal(result, expected)
-
-    def test_asobject_deprecated(self):
-        # GH18572
-        d = self.create_index()
-        with tm.assert_produces_warning(FutureWarning):
-            i = d.asobject
-        assert isinstance(i, pd.Index)

@@ -2,9 +2,12 @@ from cpython.object cimport (
     PyObject_RichCompare,
     Py_GT, Py_GE, Py_EQ, Py_NE, Py_LT, Py_LE)
 
-from cpython.datetime cimport (datetime,
+from cpython.datetime cimport (datetime, timedelta,
                                PyDateTime_Check, PyDelta_Check,
                                PyDateTime_IMPORT)
+
+from cpython.version cimport PY_MINOR_VERSION
+
 PyDateTime_IMPORT
 
 import numpy as np
@@ -18,6 +21,9 @@ cimport pandas._libs.tslibs.util as util
 from pandas._libs.tslibs.util cimport (
     get_nat, is_integer_object, is_float_object, is_datetime64_object,
     is_timedelta64_object)
+
+from pandas._libs.missing cimport C_NA
+
 
 # ----------------------------------------------------------------------
 # Constants
@@ -95,10 +101,6 @@ cdef class _NaT(datetime):
     # higher than np.ndarray and np.matrix
     __array_priority__ = 100
 
-    def __hash__(_NaT self):
-        # py3k needs this defined here
-        return hash(self.value)
-
     def __richcmp__(_NaT self, object other, int op):
         cdef:
             int ndim = getattr(other, 'ndim', -1)
@@ -115,8 +117,8 @@ cdef class _NaT(datetime):
             if is_datetime64_object(other):
                 return _nat_scalar_rules[op]
             else:
-                raise TypeError('Cannot compare type %r with type %r' %
-                                (type(self).__name__, type(other).__name__))
+                raise TypeError(f'Cannot compare type {type(self).__name__} '
+                                f'with type {type(other).__name__}')
 
         # Note: instead of passing "other, self, _reverse_ops[op]", we observe
         # that `_nat_scalar_rules` is invariant under `_reverse_ops`,
@@ -150,8 +152,7 @@ cdef class _NaT(datetime):
                 result = np.empty(other.shape, dtype="datetime64[ns]")
                 result.fill("NaT")
                 return result
-            raise TypeError("Cannot add NaT to ndarray with dtype {dtype}"
-                            .format(dtype=other.dtype))
+            raise TypeError(f"Cannot add NaT to ndarray with dtype {other.dtype}")
 
         return NotImplemented
 
@@ -203,9 +204,8 @@ cdef class _NaT(datetime):
                 result.fill("NaT")
                 return result
 
-            raise TypeError(
-                "Cannot subtract NaT from ndarray with dtype {dtype}"
-                .format(dtype=other.dtype))
+            raise TypeError(f"Cannot subtract NaT from ndarray with "
+                            f"dtype {other.dtype}")
 
         return NotImplemented
 
@@ -278,13 +278,6 @@ cdef class _NaT(datetime):
     def __long__(self):
         return NPY_NAT
 
-    def total_seconds(self):
-        """
-        Total duration of timedelta in seconds (to ns precision).
-        """
-        # GH#10939
-        return np.nan
-
     @property
     def is_leap_year(self):
         return False
@@ -328,7 +321,7 @@ class NaTType(_NaT):
 
     def __reduce_ex__(self, protocol):
         # python 3.6 compat
-        # http://bugs.python.org/issue28730
+        # https://bugs.python.org/issue28730
         # now __reduce_ex__ is defined and higher priority than __reduce__
         return self.__reduce__()
 
@@ -370,7 +363,6 @@ class NaTType(_NaT):
     days_in_month = property(fget=lambda self: np.nan)
     daysinmonth = property(fget=lambda self: np.nan)
     dayofweek = property(fget=lambda self: np.nan)
-    weekday_name = property(fget=lambda self: np.nan)
 
     # inject Timedelta properties
     days = property(fget=lambda self: np.nan)
@@ -389,6 +381,7 @@ class NaTType(_NaT):
     # nan methods
     weekday = _make_nan_func('weekday', datetime.weekday.__doc__)
     isoweekday = _make_nan_func('isoweekday', datetime.isoweekday.__doc__)
+    total_seconds = _make_nan_func('total_seconds', timedelta.total_seconds.__doc__)
     month_name = _make_nan_func('month_name',  # noqa:E128
         """
         Return the month name of the Timestamp with specified locale.
@@ -433,6 +426,10 @@ class NaTType(_NaT):
     toordinal = _make_error_func('toordinal', datetime)
     tzname = _make_error_func('tzname', datetime)
     utcoffset = _make_error_func('utcoffset', datetime)
+
+    # "fromisocalendar" was introduced in 3.8
+    if PY_MINOR_VERSION >= 8:
+        fromisocalendar = _make_error_func('fromisocalendar', datetime)
 
     # ----------------------------------------------------------------------
     # The remaining methods have docstrings copy/pasted from the analogous
@@ -727,18 +724,6 @@ default 'raise'
               nonexistent times.
 
             .. versionadded:: 0.24.0
-        errors : 'raise', 'coerce', default None
-            Determine how errors should be handled.
-
-            The behavior is as follows:
-
-            * 'raise' will raise a NonExistentTimeError if a timestamp is not
-              valid in the specified timezone (e.g. due to a transition from
-              or to DST time). Use ``nonexistent='raise'`` instead.
-            * 'coerce' will return NaT if the timestamp can not be converted
-              into the specified timezone. Use ``nonexistent='NaT'`` instead.
-
-            .. deprecated:: 0.24.0
 
         Returns
         -------
@@ -779,8 +764,10 @@ NaT = c_NaT        # Python-visible
 # ----------------------------------------------------------------------
 
 cdef inline bint checknull_with_nat(object val):
-    """ utility to check if a value is a nat or not """
-    return val is None or util.is_nan(val) or val is c_NaT
+    """
+    Utility to check if a value is a nat or not.
+    """
+    return val is None or util.is_nan(val) or val is c_NaT or val is C_NA
 
 
 cpdef bint is_null_datetimelike(object val, bint inat_is_null=True):

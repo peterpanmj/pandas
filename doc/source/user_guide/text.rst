@@ -74,6 +74,7 @@ These are places where the behavior of ``StringDtype`` objects differ from
 l. For ``StringDtype``, :ref:`string accessor methods<api.series.str>`
    that return **numeric** output will always return a nullable integer dtype,
    rather than either int or float dtype, depending on the presence of NA values.
+   Methods returning **boolean** output will return a nullable boolean dtype.
 
    .. ipython:: python
 
@@ -86,15 +87,26 @@ l. For ``StringDtype``, :ref:`string accessor methods<api.series.str>`
 
    .. ipython:: python
 
-      s.astype(object).str.count("a")
-      s.astype(object).dropna().str.count("a")
+      s2 = pd.Series(["a", None, "b"], dtype="object")
+      s2.str.count("a")
+      s2.dropna().str.count("a")
 
-   When NA values are present, the output dtype is float64.
+   When NA values are present, the output dtype is float64. Similarly for
+   methods returning boolean values.
+
+   .. ipython:: python
+
+      s.str.isdigit()
+      s.str.match("a")
 
 2. Some string methods, like :meth:`Series.str.decode` are not available
    on ``StringArray`` because ``StringArray`` only holds strings, not
    bytes.
-
+3. In comparison operations, :class:`arrays.StringArray` and ``Series`` backed
+   by a ``StringArray`` will return an object with :class:`BooleanDtype`,
+   rather than a ``bool`` dtype object. Missing values in a ``StringArray``
+   will propagate in comparison operations, rather than always comparing
+   unequal like :attr:`numpy.nan`.
 
 Everything else that follows in the rest of this document applies equally to
 ``string`` and ``object`` dtype.
@@ -177,11 +189,10 @@ and replacing any remaining whitespaces with underscores:
     Generally speaking, the ``.str`` accessor is intended to work only on strings. With very few
     exceptions, other uses are not supported, and may be disabled at a later point.
 
+.. _text.split:
 
 Splitting and replacing strings
 -------------------------------
-
-.. _text.split:
 
 Methods like ``split`` return a Series of lists:
 

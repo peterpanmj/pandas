@@ -1,10 +1,11 @@
 import abc
 import inspect
-from typing import TYPE_CHECKING, Any, Dict, Iterator, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterator, Optional, Tuple, Type, Union
 
 import numpy as np
 
 from pandas._libs import reduction as libreduction
+from pandas._typing import Axis
 from pandas.util._decorators import cache_readonly
 
 from pandas.core.dtypes.common import (
@@ -13,7 +14,9 @@ from pandas.core.dtypes.common import (
     is_list_like,
     is_sequence,
 )
-from pandas.core.dtypes.generic import ABCMultiIndex, ABCSeries
+from pandas.core.dtypes.generic import ABCSeries
+
+from pandas.core.construction import create_series_with_explicit_dtype
 
 if TYPE_CHECKING:
     from pandas import DataFrame, Series, Index
@@ -24,18 +27,18 @@ ResType = Dict[int, Any]
 def frame_apply(
     obj: "DataFrame",
     func,
-    axis=0,
+    axis: Axis = 0,
     raw: bool = False,
-    result_type=None,
+    result_type: Optional[str] = None,
     ignore_failures: bool = False,
     args=None,
     kwds=None,
 ):
     """ construct and return a row or column based frame apply object """
-
     axis = obj._get_axis_number(axis)
+    klass: Type[FrameApply]
     if axis == 0:
-        klass = FrameRowApply  # type: Type[FrameApply]
+        klass = FrameRowApply
     elif axis == 1:
         klass = FrameColumnApply
 
@@ -84,7 +87,7 @@ class FrameApply(metaclass=abc.ABCMeta):
         obj: "DataFrame",
         func,
         raw: bool,
-        result_type,
+        result_type: Optional[str],
         ignore_failures: bool,
         args,
         kwds,
@@ -140,7 +143,6 @@ class FrameApply(metaclass=abc.ABCMeta):
 
     def get_result(self):
         """ compute the results """
-
         # dispatch to agg
         if is_list_like(self.f) or is_dict_like(self.f):
             return self.obj.aggregate(self.f, axis=self.axis, *self.args, **self.kwds)
@@ -189,7 +191,6 @@ class FrameApply(metaclass=abc.ABCMeta):
         we will try to apply the function to an empty
         series in order to see if this is a reduction function
         """
-
         # we are not asked to reduce or infer reduction
         # so just return a copy of the existing object
         if self.result_type not in ["reduce", None]:
@@ -202,7 +203,7 @@ class FrameApply(metaclass=abc.ABCMeta):
 
         if not should_reduce:
             try:
-                r = self.f(Series([]))
+                r = self.f(Series([], dtype=np.float64))
             except Exception:
                 pass
             else:
@@ -210,7 +211,7 @@ class FrameApply(metaclass=abc.ABCMeta):
 
         if should_reduce:
             if len(self.agg_axis):
-                r = self.f(Series([]))
+                r = self.f(Series([], dtype=np.float64))
             else:
                 r = np.nan
 
@@ -226,6 +227,8 @@ class FrameApply(metaclass=abc.ABCMeta):
             if "Function does not reduce" not in str(err):
                 # catch only ValueError raised intentionally in libreduction
                 raise
+            # We expect np.apply_along_axis to give a two-dimensional result, or
+            #  also raise.
             result = np.apply_along_axis(self.f, self.axis, self.values)
 
         # TODO: mixed type case
@@ -272,9 +275,11 @@ class FrameApply(metaclass=abc.ABCMeta):
         if (
             self.result_type in ["reduce", None]
             and not self.dtypes.apply(is_extension_array_dtype).any()
-            # Disallow complex_internals since libreduction shortcut
-            #  cannot handle MultiIndex
-            and not isinstance(self.agg_axis, ABCMultiIndex)
+            # Disallow dtypes where setting _index_data will break
+            #  ExtensionArray values, see GH#31182
+            and not self.dtypes.apply(lambda x: x.kind in ["m", "M"]).any()
+            # Disallow complex_internals since libreduction shortcut raises a TypeError
+            and not self.agg_axis._has_complex_internals
         ):
 
             values = self.values
@@ -315,7 +320,6 @@ class FrameApply(metaclass=abc.ABCMeta):
         series_gen = self.series_generator
         res_index = self.result_index
 
-        i = None
         keys = []
         results = {}
         if self.ignore_failures:
@@ -343,6 +347,7 @@ class FrameApply(metaclass=abc.ABCMeta):
     def wrap_results(
         self, results: ResType, res_index: "Index"
     ) -> Union["Series", "DataFrame"]:
+        from pandas import Series
 
         # see if we can infer the results
         if len(results) > 0 and 0 in results and is_sequence(results[0]):
@@ -350,7 +355,17 @@ class FrameApply(metaclass=abc.ABCMeta):
             return self.wrap_results_for_axis(results, res_index)
 
         # dict of scalars
-        result = self.obj._constructor_sliced(results)
+
+        # the default dtype of an empty Series will be `object`, but this
+        # code can be hit by df.mean() where the result should have dtype
+        # float64 even if it's an empty Series.
+        constructor_sliced = self.obj._constructor_sliced
+        if constructor_sliced is Series:
+            result = create_series_with_explicit_dtype(
+                results, dtype_if_empty=np.float64
+            )
+        else:
+            result = constructor_sliced(results)
         result.index = res_index
 
         return result
@@ -378,7 +393,6 @@ class FrameRowApply(FrameApply):
         self, results: ResType, res_index: "Index"
     ) -> "DataFrame":
         """ return the results for the rows """
-
         result = self.obj._constructor(data=results)
 
         if not isinstance(results[0], ABCSeries):
@@ -439,7 +453,6 @@ class FrameColumnApply(FrameApply):
 
     def infer_to_same_shape(self, results: ResType, res_index: "Index") -> "DataFrame":
         """ infer the results to the same shape as the input object """
-
         result = self.obj._constructor(data=results)
         result = result.T
 

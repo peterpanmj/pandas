@@ -5,7 +5,7 @@ import pytest
 
 import pandas as pd
 from pandas import Categorical, Series, date_range, isna
-import pandas.util.testing as tm
+import pandas._testing as tm
 
 
 @pytest.mark.parametrize(
@@ -153,6 +153,17 @@ def test_align_multiindex():
     tm.assert_series_equal(expr, res2l)
 
 
+@pytest.mark.parametrize("method", ["backfill", "bfill", "pad", "ffill", None])
+def test_align_method(method):
+    # GH31788
+    ser = pd.Series(range(3), index=range(3))
+    df = pd.DataFrame(0.0, index=range(3), columns=range(3))
+
+    result_ser, result_df = ser.align(df, method=method)
+    tm.assert_series_equal(result_ser, ser)
+    tm.assert_frame_equal(result_df, df)
+
+
 def test_reindex(datetime_series, string_series):
     identity = string_series.reindex(string_series.index)
 
@@ -230,7 +241,7 @@ def test_reindex_with_datetimes():
 
 def test_reindex_corner(datetime_series):
     # (don't forget to fix this) I think it's fixed
-    empty = Series()
+    empty = Series(dtype=object)
     empty.reindex(datetime_series.index, method="pad")  # it works
 
     # corner case: pad empty series
@@ -243,8 +254,8 @@ def test_reindex_corner(datetime_series):
     # bad fill method
     ts = datetime_series[::2]
     msg = (
-        r"Invalid fill method\. Expecting pad \(ffill\), backfill"
-        r" \(bfill\) or nearest\. Got foo"
+        r"Invalid fill method\. Expecting pad \(ffill\), backfill "
+        r"\(bfill\) or nearest\. Got foo"
     )
     with pytest.raises(ValueError, match=msg):
         ts.reindex(datetime_series.index, method="foo")
@@ -539,8 +550,9 @@ def test_drop_with_ignore_errors():
 def test_drop_empty_list(index, drop_labels):
     # GH 21494
     expected_index = [i for i in index if i not in drop_labels]
-    series = pd.Series(index=index).drop(drop_labels)
-    tm.assert_series_equal(series, pd.Series(index=expected_index))
+    series = pd.Series(index=index, dtype=object).drop(drop_labels)
+    expected = pd.Series(index=expected_index, dtype=object)
+    tm.assert_series_equal(series, expected)
 
 
 @pytest.mark.parametrize(
@@ -554,4 +566,5 @@ def test_drop_empty_list(index, drop_labels):
 def test_drop_non_empty_list(data, index, drop_labels):
     # GH 21494 and GH 16877
     with pytest.raises(KeyError, match="not found in axis"):
-        pd.Series(data=data, index=index).drop(drop_labels)
+        dtype = object if data is None else None
+        pd.Series(data=data, index=index, dtype=dtype).drop(drop_labels)

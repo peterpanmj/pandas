@@ -3,7 +3,7 @@ import pytest
 
 import pandas as pd
 from pandas import DataFrame, lreshape, melt, wide_to_long
-import pandas.util.testing as tm
+import pandas._testing as tm
 
 
 class TestMelt:
@@ -317,6 +317,22 @@ class TestMelt:
         ):
             multi.melt(["A"], ["F"], col_level=0)
 
+    def test_melt_mixed_int_str_id_vars(self):
+        # GH 29718
+        df = DataFrame({0: ["foo"], "a": ["bar"], "b": [1], "d": [2]})
+        result = melt(df, id_vars=[0, "a"], value_vars=["b", "d"])
+        expected = DataFrame(
+            {0: ["foo"] * 2, "a": ["bar"] * 2, "variable": list("bd"), "value": [1, 2]}
+        )
+        tm.assert_frame_equal(result, expected)
+
+    def test_melt_mixed_int_str_value_vars(self):
+        # GH 29718
+        df = DataFrame({0: ["foo"], "a": ["bar"]})
+        result = melt(df, value_vars=[0, "a"])
+        expected = DataFrame({"variable": [0, "a"], "value": ["foo", "bar"]})
+        tm.assert_frame_equal(result, expected)
+
 
 class TestLreshape:
     def test_pairs(self):
@@ -348,8 +364,8 @@ class TestLreshape:
         df = DataFrame(data)
 
         spec = {
-            "visitdt": ["visitdt{i:d}".format(i=i) for i in range(1, 4)],
-            "wt": ["wt{i:d}".format(i=i) for i in range(1, 4)],
+            "visitdt": [f"visitdt{i:d}" for i in range(1, 4)],
+            "wt": [f"wt{i:d}" for i in range(1, 4)],
         }
         result = lreshape(df, spec)
 
@@ -537,9 +553,12 @@ class TestLreshape:
         exp = DataFrame(exp_data, columns=result.columns)
         tm.assert_frame_equal(result, exp)
 
+        with tm.assert_produces_warning(FutureWarning):
+            result = lreshape(df, spec, dropna=False, label="foo")
+
         spec = {
-            "visitdt": ["visitdt{i:d}".format(i=i) for i in range(1, 3)],
-            "wt": ["wt{i:d}".format(i=i) for i in range(1, 4)],
+            "visitdt": [f"visitdt{i:d}" for i in range(1, 3)],
+            "wt": [f"wt{i:d}" for i in range(1, 4)],
         }
         msg = "All column lists must be same length"
         with pytest.raises(ValueError, match=msg):

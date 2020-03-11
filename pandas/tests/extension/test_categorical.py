@@ -20,9 +20,9 @@ import pytest
 
 import pandas as pd
 from pandas import Categorical, CategoricalIndex, Timestamp
+import pandas._testing as tm
 from pandas.api.types import CategoricalDtype
 from pandas.tests.extension import base
-import pandas.util.testing as tm
 
 
 def make_data():
@@ -93,10 +93,7 @@ class TestConstructors(base.BaseConstructorsTests):
 
 
 class TestReshaping(base.BaseReshapingTests):
-    def test_ravel(self, data):
-        # GH#27199 Categorical.ravel returns self until after deprecation cycle
-        with tm.assert_produces_warning(FutureWarning):
-            data.ravel()
+    pass
 
 
 class TestGetitem(base.BaseGetitemTests):
@@ -281,8 +278,22 @@ class TestComparisonOps(base.BaseComparisonOpsTests):
             assert (result == expected).all()
 
         else:
-            with pytest.raises(TypeError):
+            msg = "Unordered Categoricals can only compare equality or not"
+            with pytest.raises(TypeError, match=msg):
                 op(data, other)
+
+    @pytest.mark.parametrize(
+        "categories",
+        [["a", "b"], [0, 1], [pd.Timestamp("2019"), pd.Timestamp("2020")]],
+    )
+    def test_not_equal_with_na(self, categories):
+        # https://github.com/pandas-dev/pandas/issues/32276
+        c1 = Categorical.from_codes([-1, 0], categories=categories)
+        c2 = Categorical.from_codes([0, 1], categories=categories)
+
+        result = c1 != c2
+
+        assert result.all()
 
 
 class TestParsing(base.BaseParsingTests):

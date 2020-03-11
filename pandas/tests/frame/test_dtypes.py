@@ -4,7 +4,7 @@ from datetime import timedelta
 import numpy as np
 import pytest
 
-from pandas.core.dtypes.dtypes import CategoricalDtype, DatetimeTZDtype
+from pandas.core.dtypes.dtypes import CategoricalDtype, DatetimeTZDtype, IntervalDtype
 
 import pandas as pd
 from pandas import (
@@ -18,8 +18,8 @@ from pandas import (
     date_range,
     option_context,
 )
+import pandas._testing as tm
 from pandas.core.arrays import integer_array
-import pandas.util.testing as tm
 
 
 def _check_cast(df, v):
@@ -46,62 +46,32 @@ class TestDataFrameDataTypes:
         assert result["b"].dtype == np.float64
         assert result["c"].dtype == np.float64
 
-    def test_empty_frame_dtypes_ftypes(self):
+    def test_empty_frame_dtypes(self):
         empty_df = pd.DataFrame()
         tm.assert_series_equal(empty_df.dtypes, pd.Series(dtype=np.object))
 
-        # GH 26705 - Assert .ftypes is deprecated
-        with tm.assert_produces_warning(FutureWarning):
-            tm.assert_series_equal(empty_df.ftypes, pd.Series(dtype=np.object))
-
         nocols_df = pd.DataFrame(index=[1, 2, 3])
         tm.assert_series_equal(nocols_df.dtypes, pd.Series(dtype=np.object))
-
-        # GH 26705 - Assert .ftypes is deprecated
-        with tm.assert_produces_warning(FutureWarning):
-            tm.assert_series_equal(nocols_df.ftypes, pd.Series(dtype=np.object))
 
         norows_df = pd.DataFrame(columns=list("abc"))
         tm.assert_series_equal(
             norows_df.dtypes, pd.Series(np.object, index=list("abc"))
         )
 
-        # GH 26705 - Assert .ftypes is deprecated
-        with tm.assert_produces_warning(FutureWarning):
-            tm.assert_series_equal(
-                norows_df.ftypes, pd.Series("object:dense", index=list("abc"))
-            )
-
         norows_int_df = pd.DataFrame(columns=list("abc")).astype(np.int32)
         tm.assert_series_equal(
             norows_int_df.dtypes, pd.Series(np.dtype("int32"), index=list("abc"))
         )
-        # GH 26705 - Assert .ftypes is deprecated
-        with tm.assert_produces_warning(FutureWarning):
-            tm.assert_series_equal(
-                norows_int_df.ftypes, pd.Series("int32:dense", index=list("abc"))
-            )
 
         odict = OrderedDict
         df = pd.DataFrame(odict([("a", 1), ("b", True), ("c", 1.0)]), index=[1, 2, 3])
         ex_dtypes = pd.Series(
             odict([("a", np.int64), ("b", np.bool), ("c", np.float64)])
         )
-        ex_ftypes = pd.Series(
-            odict([("a", "int64:dense"), ("b", "bool:dense"), ("c", "float64:dense")])
-        )
         tm.assert_series_equal(df.dtypes, ex_dtypes)
-
-        # GH 26705 - Assert .ftypes is deprecated
-        with tm.assert_produces_warning(FutureWarning):
-            tm.assert_series_equal(df.ftypes, ex_ftypes)
 
         # same but for empty slice of df
         tm.assert_series_equal(df[:0].dtypes, ex_dtypes)
-
-        # GH 26705 - Assert .ftypes is deprecated
-        with tm.assert_produces_warning(FutureWarning):
-            tm.assert_series_equal(df[:0].ftypes, ex_ftypes)
 
     def test_datetime_with_tz_dtypes(self):
         tzframe = DataFrame(
@@ -141,325 +111,6 @@ class TestDataFrameDataTypes:
             pd.Series(odict([("a", np.float_), ("b", np.float_), ("c", np.float_)])),
         )
 
-    def test_select_dtypes_include_using_list_like(self):
-        df = DataFrame(
-            {
-                "a": list("abc"),
-                "b": list(range(1, 4)),
-                "c": np.arange(3, 6).astype("u1"),
-                "d": np.arange(4.0, 7.0, dtype="float64"),
-                "e": [True, False, True],
-                "f": pd.Categorical(list("abc")),
-                "g": pd.date_range("20130101", periods=3),
-                "h": pd.date_range("20130101", periods=3, tz="US/Eastern"),
-                "i": pd.date_range("20130101", periods=3, tz="CET"),
-                "j": pd.period_range("2013-01", periods=3, freq="M"),
-                "k": pd.timedelta_range("1 day", periods=3),
-            }
-        )
-
-        ri = df.select_dtypes(include=[np.number])
-        ei = df[["b", "c", "d", "k"]]
-        tm.assert_frame_equal(ri, ei)
-
-        ri = df.select_dtypes(include=[np.number], exclude=["timedelta"])
-        ei = df[["b", "c", "d"]]
-        tm.assert_frame_equal(ri, ei)
-
-        ri = df.select_dtypes(include=[np.number, "category"], exclude=["timedelta"])
-        ei = df[["b", "c", "d", "f"]]
-        tm.assert_frame_equal(ri, ei)
-
-        ri = df.select_dtypes(include=["datetime"])
-        ei = df[["g"]]
-        tm.assert_frame_equal(ri, ei)
-
-        ri = df.select_dtypes(include=["datetime64"])
-        ei = df[["g"]]
-        tm.assert_frame_equal(ri, ei)
-
-        ri = df.select_dtypes(include=["datetimetz"])
-        ei = df[["h", "i"]]
-        tm.assert_frame_equal(ri, ei)
-
-        with pytest.raises(NotImplementedError, match=r"^$"):
-            df.select_dtypes(include=["period"])
-
-    def test_select_dtypes_exclude_using_list_like(self):
-        df = DataFrame(
-            {
-                "a": list("abc"),
-                "b": list(range(1, 4)),
-                "c": np.arange(3, 6).astype("u1"),
-                "d": np.arange(4.0, 7.0, dtype="float64"),
-                "e": [True, False, True],
-            }
-        )
-        re = df.select_dtypes(exclude=[np.number])
-        ee = df[["a", "e"]]
-        tm.assert_frame_equal(re, ee)
-
-    def test_select_dtypes_exclude_include_using_list_like(self):
-        df = DataFrame(
-            {
-                "a": list("abc"),
-                "b": list(range(1, 4)),
-                "c": np.arange(3, 6).astype("u1"),
-                "d": np.arange(4.0, 7.0, dtype="float64"),
-                "e": [True, False, True],
-                "f": pd.date_range("now", periods=3).values,
-            }
-        )
-        exclude = (np.datetime64,)
-        include = np.bool_, "integer"
-        r = df.select_dtypes(include=include, exclude=exclude)
-        e = df[["b", "c", "e"]]
-        tm.assert_frame_equal(r, e)
-
-        exclude = ("datetime",)
-        include = "bool", "int64", "int32"
-        r = df.select_dtypes(include=include, exclude=exclude)
-        e = df[["b", "e"]]
-        tm.assert_frame_equal(r, e)
-
-    def test_select_dtypes_include_using_scalars(self):
-        df = DataFrame(
-            {
-                "a": list("abc"),
-                "b": list(range(1, 4)),
-                "c": np.arange(3, 6).astype("u1"),
-                "d": np.arange(4.0, 7.0, dtype="float64"),
-                "e": [True, False, True],
-                "f": pd.Categorical(list("abc")),
-                "g": pd.date_range("20130101", periods=3),
-                "h": pd.date_range("20130101", periods=3, tz="US/Eastern"),
-                "i": pd.date_range("20130101", periods=3, tz="CET"),
-                "j": pd.period_range("2013-01", periods=3, freq="M"),
-                "k": pd.timedelta_range("1 day", periods=3),
-            }
-        )
-
-        ri = df.select_dtypes(include=np.number)
-        ei = df[["b", "c", "d", "k"]]
-        tm.assert_frame_equal(ri, ei)
-
-        ri = df.select_dtypes(include="datetime")
-        ei = df[["g"]]
-        tm.assert_frame_equal(ri, ei)
-
-        ri = df.select_dtypes(include="datetime64")
-        ei = df[["g"]]
-        tm.assert_frame_equal(ri, ei)
-
-        ri = df.select_dtypes(include="category")
-        ei = df[["f"]]
-        tm.assert_frame_equal(ri, ei)
-
-        with pytest.raises(NotImplementedError, match=r"^$"):
-            df.select_dtypes(include="period")
-
-    def test_select_dtypes_exclude_using_scalars(self):
-        df = DataFrame(
-            {
-                "a": list("abc"),
-                "b": list(range(1, 4)),
-                "c": np.arange(3, 6).astype("u1"),
-                "d": np.arange(4.0, 7.0, dtype="float64"),
-                "e": [True, False, True],
-                "f": pd.Categorical(list("abc")),
-                "g": pd.date_range("20130101", periods=3),
-                "h": pd.date_range("20130101", periods=3, tz="US/Eastern"),
-                "i": pd.date_range("20130101", periods=3, tz="CET"),
-                "j": pd.period_range("2013-01", periods=3, freq="M"),
-                "k": pd.timedelta_range("1 day", periods=3),
-            }
-        )
-
-        ri = df.select_dtypes(exclude=np.number)
-        ei = df[["a", "e", "f", "g", "h", "i", "j"]]
-        tm.assert_frame_equal(ri, ei)
-
-        ri = df.select_dtypes(exclude="category")
-        ei = df[["a", "b", "c", "d", "e", "g", "h", "i", "j", "k"]]
-        tm.assert_frame_equal(ri, ei)
-
-        with pytest.raises(NotImplementedError, match=r"^$"):
-            df.select_dtypes(exclude="period")
-
-    def test_select_dtypes_include_exclude_using_scalars(self):
-        df = DataFrame(
-            {
-                "a": list("abc"),
-                "b": list(range(1, 4)),
-                "c": np.arange(3, 6).astype("u1"),
-                "d": np.arange(4.0, 7.0, dtype="float64"),
-                "e": [True, False, True],
-                "f": pd.Categorical(list("abc")),
-                "g": pd.date_range("20130101", periods=3),
-                "h": pd.date_range("20130101", periods=3, tz="US/Eastern"),
-                "i": pd.date_range("20130101", periods=3, tz="CET"),
-                "j": pd.period_range("2013-01", periods=3, freq="M"),
-                "k": pd.timedelta_range("1 day", periods=3),
-            }
-        )
-
-        ri = df.select_dtypes(include=np.number, exclude="floating")
-        ei = df[["b", "c", "k"]]
-        tm.assert_frame_equal(ri, ei)
-
-    def test_select_dtypes_include_exclude_mixed_scalars_lists(self):
-        df = DataFrame(
-            {
-                "a": list("abc"),
-                "b": list(range(1, 4)),
-                "c": np.arange(3, 6).astype("u1"),
-                "d": np.arange(4.0, 7.0, dtype="float64"),
-                "e": [True, False, True],
-                "f": pd.Categorical(list("abc")),
-                "g": pd.date_range("20130101", periods=3),
-                "h": pd.date_range("20130101", periods=3, tz="US/Eastern"),
-                "i": pd.date_range("20130101", periods=3, tz="CET"),
-                "j": pd.period_range("2013-01", periods=3, freq="M"),
-                "k": pd.timedelta_range("1 day", periods=3),
-            }
-        )
-
-        ri = df.select_dtypes(include=np.number, exclude=["floating", "timedelta"])
-        ei = df[["b", "c"]]
-        tm.assert_frame_equal(ri, ei)
-
-        ri = df.select_dtypes(include=[np.number, "category"], exclude="floating")
-        ei = df[["b", "c", "f", "k"]]
-        tm.assert_frame_equal(ri, ei)
-
-    def test_select_dtypes_duplicate_columns(self):
-        # GH20839
-        odict = OrderedDict
-        df = DataFrame(
-            odict(
-                [
-                    ("a", list("abc")),
-                    ("b", list(range(1, 4))),
-                    ("c", np.arange(3, 6).astype("u1")),
-                    ("d", np.arange(4.0, 7.0, dtype="float64")),
-                    ("e", [True, False, True]),
-                    ("f", pd.date_range("now", periods=3).values),
-                ]
-            )
-        )
-        df.columns = ["a", "a", "b", "b", "b", "c"]
-
-        expected = DataFrame(
-            {"a": list(range(1, 4)), "b": np.arange(3, 6).astype("u1")}
-        )
-
-        result = df.select_dtypes(include=[np.number], exclude=["floating"])
-        tm.assert_frame_equal(result, expected)
-
-    def test_select_dtypes_not_an_attr_but_still_valid_dtype(self):
-        df = DataFrame(
-            {
-                "a": list("abc"),
-                "b": list(range(1, 4)),
-                "c": np.arange(3, 6).astype("u1"),
-                "d": np.arange(4.0, 7.0, dtype="float64"),
-                "e": [True, False, True],
-                "f": pd.date_range("now", periods=3).values,
-            }
-        )
-        df["g"] = df.f.diff()
-        assert not hasattr(np, "u8")
-        r = df.select_dtypes(include=["i8", "O"], exclude=["timedelta"])
-        e = df[["a", "b"]]
-        tm.assert_frame_equal(r, e)
-
-        r = df.select_dtypes(include=["i8", "O", "timedelta64[ns]"])
-        e = df[["a", "b", "g"]]
-        tm.assert_frame_equal(r, e)
-
-    def test_select_dtypes_empty(self):
-        df = DataFrame({"a": list("abc"), "b": list(range(1, 4))})
-        msg = "at least one of include or exclude must be nonempty"
-        with pytest.raises(ValueError, match=msg):
-            df.select_dtypes()
-
-    def test_select_dtypes_bad_datetime64(self):
-        df = DataFrame(
-            {
-                "a": list("abc"),
-                "b": list(range(1, 4)),
-                "c": np.arange(3, 6).astype("u1"),
-                "d": np.arange(4.0, 7.0, dtype="float64"),
-                "e": [True, False, True],
-                "f": pd.date_range("now", periods=3).values,
-            }
-        )
-        with pytest.raises(ValueError, match=".+ is too specific"):
-            df.select_dtypes(include=["datetime64[D]"])
-
-        with pytest.raises(ValueError, match=".+ is too specific"):
-            df.select_dtypes(exclude=["datetime64[as]"])
-
-    def test_select_dtypes_datetime_with_tz(self):
-
-        df2 = DataFrame(
-            dict(
-                A=Timestamp("20130102", tz="US/Eastern"),
-                B=Timestamp("20130603", tz="CET"),
-            ),
-            index=range(5),
-        )
-        df3 = pd.concat([df2.A.to_frame(), df2.B.to_frame()], axis=1)
-        result = df3.select_dtypes(include=["datetime64[ns]"])
-        expected = df3.reindex(columns=[])
-        tm.assert_frame_equal(result, expected)
-
-    @pytest.mark.parametrize(
-        "dtype", [str, "str", np.string_, "S1", "unicode", np.unicode_, "U1"]
-    )
-    @pytest.mark.parametrize("arg", ["include", "exclude"])
-    def test_select_dtypes_str_raises(self, dtype, arg):
-        df = DataFrame(
-            {
-                "a": list("abc"),
-                "g": list("abc"),
-                "b": list(range(1, 4)),
-                "c": np.arange(3, 6).astype("u1"),
-                "d": np.arange(4.0, 7.0, dtype="float64"),
-                "e": [True, False, True],
-                "f": pd.date_range("now", periods=3).values,
-            }
-        )
-        msg = "string dtypes are not allowed"
-        kwargs = {arg: [dtype]}
-
-        with pytest.raises(TypeError, match=msg):
-            df.select_dtypes(**kwargs)
-
-    def test_select_dtypes_bad_arg_raises(self):
-        df = DataFrame(
-            {
-                "a": list("abc"),
-                "g": list("abc"),
-                "b": list(range(1, 4)),
-                "c": np.arange(3, 6).astype("u1"),
-                "d": np.arange(4.0, 7.0, dtype="float64"),
-                "e": [True, False, True],
-                "f": pd.date_range("now", periods=3).values,
-            }
-        )
-
-        msg = "data type.*not understood"
-        with pytest.raises(TypeError, match=msg):
-            df.select_dtypes(["blargy, blarg, blarg"])
-
-    def test_select_dtypes_typecodes(self):
-        # GH 11990
-        df = tm.makeCustomDataframe(30, 3, data_gen_f=lambda x, y: np.random.random())
-        expected = df
-        FLOAT_TYPES = list(np.typecodes["AllFloat"])
-        tm.assert_frame_equal(df.select_dtypes(FLOAT_TYPES), expected)
-
     def test_dtypes_gh8722(self, float_string_frame):
         float_string_frame["bool"] = float_string_frame["A"] > 0
         result = float_string_frame.dtypes
@@ -473,22 +124,6 @@ class TestDataFrameDataTypes:
             df = DataFrame([[1]])
             result = df.dtypes
             tm.assert_series_equal(result, Series({0: np.dtype("int64")}))
-
-    def test_ftypes(self, mixed_float_frame):
-        frame = mixed_float_frame
-        expected = Series(
-            dict(
-                A="float32:dense",
-                B="float32:dense",
-                C="float16:dense",
-                D="float64:dense",
-            )
-        ).sort_values()
-
-        # GH 26705 - Assert .ftypes is deprecated
-        with tm.assert_produces_warning(FutureWarning):
-            result = frame.ftypes.sort_values()
-        tm.assert_series_equal(result, expected)
 
     def test_astype_float(self, float_frame):
         casted = float_frame.astype(int)
@@ -702,8 +337,8 @@ class TestDataFrameDataTypes:
         # GH 16717
         # if dtypes provided is empty, the resulting DataFrame
         # should be the same as the original DataFrame
-        dt7 = dtype_class({})
-        result = df.astype(dt7)
+        dt7 = dtype_class({}) if dtype_class is dict else dtype_class({}, dtype=object)
+        equiv = df.astype(dt7)
         tm.assert_frame_equal(df, equiv)
         tm.assert_frame_equal(df, original)
 
@@ -745,17 +380,10 @@ class TestDataFrameDataTypes:
         expected = DataFrame({k: Categorical(d[k], dtype=dtype) for k in d})
         tm.assert_frame_equal(result, expected)
 
-    @pytest.mark.parametrize(
-        "cls",
-        [
-            pd.api.types.CategoricalDtype,
-            pd.api.types.DatetimeTZDtype,
-            pd.api.types.IntervalDtype,
-        ],
-    )
+    @pytest.mark.parametrize("cls", [CategoricalDtype, DatetimeTZDtype, IntervalDtype])
     def test_astype_categoricaldtype_class_raises(self, cls):
         df = DataFrame({"A": ["a", "a", "b", "c"]})
-        xpr = "Expected an instance of {}".format(cls.__name__)
+        xpr = f"Expected an instance of {cls.__name__}"
         with pytest.raises(TypeError, match=xpr):
             df.astype({"A": cls})
 
@@ -880,7 +508,7 @@ class TestDataFrameDataTypes:
     def test_astype_from_datetimelike_to_objectt(self, dtype, unit):
         # tests astype to object dtype
         # gh-19223 / gh-12425
-        dtype = "{}[{}]".format(dtype, unit)
+        dtype = f"{dtype}[{unit}]"
         arr = np.array([[1, 2, 3]], dtype=dtype)
         df = DataFrame(arr)
         result = df.astype(object)
@@ -897,7 +525,7 @@ class TestDataFrameDataTypes:
     def test_astype_to_datetimelike_unit(self, arr_dtype, dtype, unit):
         # tests all units from numeric origination
         # gh-19223 / gh-12425
-        dtype = "{}[{}]".format(dtype, unit)
+        dtype = f"{dtype}[{unit}]"
         arr = np.array([[1, 2, 3]], dtype=arr_dtype)
         df = DataFrame(arr)
         result = df.astype(dtype)
@@ -909,7 +537,7 @@ class TestDataFrameDataTypes:
     def test_astype_to_datetime_unit(self, unit):
         # tests all units from datetime origination
         # gh-19223
-        dtype = "M8[{}]".format(unit)
+        dtype = f"M8[{unit}]"
         arr = np.array([[1, 2, 3]], dtype=dtype)
         df = DataFrame(arr)
         result = df.astype(dtype)
@@ -921,7 +549,7 @@ class TestDataFrameDataTypes:
     def test_astype_to_timedelta_unit_ns(self, unit):
         # preserver the timedelta conversion
         # gh-19223
-        dtype = "m8[{}]".format(unit)
+        dtype = f"m8[{unit}]"
         arr = np.array([[1, 2, 3]], dtype=dtype)
         df = DataFrame(arr)
         result = df.astype(dtype)
@@ -933,7 +561,7 @@ class TestDataFrameDataTypes:
     def test_astype_to_timedelta_unit(self, unit):
         # coerce to float
         # gh-19223
-        dtype = "m8[{}]".format(unit)
+        dtype = f"m8[{unit}]"
         arr = np.array([[1, 2, 3]], dtype=dtype)
         df = DataFrame(arr)
         result = df.astype(dtype)
@@ -945,21 +573,21 @@ class TestDataFrameDataTypes:
     def test_astype_to_incorrect_datetimelike(self, unit):
         # trying to astype a m to a M, or vice-versa
         # gh-19224
-        dtype = "M8[{}]".format(unit)
-        other = "m8[{}]".format(unit)
+        dtype = f"M8[{unit}]"
+        other = f"m8[{unit}]"
 
         df = DataFrame(np.array([[1, 2, 3]], dtype=dtype))
         msg = (
-            r"cannot astype a datetimelike from \[datetime64\[ns\]\] to"
-            r" \[timedelta64\[{}\]\]"
-        ).format(unit)
+            fr"cannot astype a datetimelike from \[datetime64\[ns\]\] to "
+            fr"\[timedelta64\[{unit}\]\]"
+        )
         with pytest.raises(TypeError, match=msg):
             df.astype(other)
 
         msg = (
-            r"cannot astype a timedelta from \[timedelta64\[ns\]\] to"
-            r" \[datetime64\[{}\]\]"
-        ).format(unit)
+            fr"cannot astype a timedelta from \[timedelta64\[ns\]\] to "
+            fr"\[datetime64\[{unit}\]\]"
+        )
         df = DataFrame(np.array([[1, 2, 3]], dtype=other))
         with pytest.raises(TypeError, match=msg):
             df.astype(dtype)
@@ -1123,6 +751,27 @@ class TestDataFrameDataTypes:
         # change the dtype of the elements from object to float one by one
         result.loc[result.index, "A"] = [float(x) for x in col_data]
         expected = pd.DataFrame(col_data, columns=["A"], dtype=float)
+        tm.assert_frame_equal(result, expected)
+
+    @pytest.mark.parametrize(
+        "convert_integer, expected", [(False, np.dtype("int32")), (True, "Int32")]
+    )
+    def test_convert_dtypes(self, convert_integer, expected):
+        # Specific types are tested in tests/series/test_dtypes.py
+        # Just check that it works for DataFrame here
+        df = pd.DataFrame(
+            {
+                "a": pd.Series([1, 2, 3], dtype=np.dtype("int32")),
+                "b": pd.Series(["x", "y", "z"], dtype=np.dtype("O")),
+            }
+        )
+        result = df.convert_dtypes(True, True, convert_integer, False)
+        expected = pd.DataFrame(
+            {
+                "a": pd.Series([1, 2, 3], dtype=expected),
+                "b": pd.Series(["x", "y", "z"], dtype="string"),
+            }
+        )
         tm.assert_frame_equal(result, expected)
 
 

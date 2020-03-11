@@ -10,7 +10,7 @@ from pandas import (
     date_range,
     to_datetime,
 )
-import pandas.util.testing as tm
+import pandas._testing as tm
 
 import pandas.tseries.offsets as offsets
 
@@ -535,25 +535,36 @@ class TestRollingTS:
         expected["B"] = [0.0, 1, 2, 3, 4]
         tm.assert_frame_equal(result, expected)
 
-    def test_ragged_apply(self, raw):
+    @pytest.mark.parametrize(
+        "freq, op, result_data",
+        [
+            ("ms", "min", [0.0] * 10),
+            ("ms", "mean", [0.0] * 9 + [2.0 / 9]),
+            ("ms", "max", [0.0] * 9 + [2.0]),
+            ("s", "min", [0.0] * 10),
+            ("s", "mean", [0.0] * 9 + [2.0 / 9]),
+            ("s", "max", [0.0] * 9 + [2.0]),
+            ("min", "min", [0.0] * 10),
+            ("min", "mean", [0.0] * 9 + [2.0 / 9]),
+            ("min", "max", [0.0] * 9 + [2.0]),
+            ("h", "min", [0.0] * 10),
+            ("h", "mean", [0.0] * 9 + [2.0 / 9]),
+            ("h", "max", [0.0] * 9 + [2.0]),
+            ("D", "min", [0.0] * 10),
+            ("D", "mean", [0.0] * 9 + [2.0 / 9]),
+            ("D", "max", [0.0] * 9 + [2.0]),
+        ],
+    )
+    def test_freqs_ops(self, freq, op, result_data):
+        # GH 21096
+        index = date_range(start="2018-1-1 01:00:00", freq=f"1{freq}", periods=10)
+        s = Series(data=0, index=index)
+        s.iloc[1] = np.nan
+        s.iloc[-1] = 2
+        result = getattr(s.rolling(window=f"10{freq}"), op)()
+        expected = Series(data=result_data, index=index)
 
-        df = self.ragged
-
-        f = lambda x: 1
-        result = df.rolling(window="1s", min_periods=1).apply(f, raw=raw)
-        expected = df.copy()
-        expected["B"] = 1.0
-        tm.assert_frame_equal(result, expected)
-
-        result = df.rolling(window="2s", min_periods=1).apply(f, raw=raw)
-        expected = df.copy()
-        expected["B"] = 1.0
-        tm.assert_frame_equal(result, expected)
-
-        result = df.rolling(window="5s", min_periods=1).apply(f, raw=raw)
-        expected = df.copy()
-        expected["B"] = 1.0
-        tm.assert_frame_equal(result, expected)
+        tm.assert_series_equal(result, expected)
 
     def test_all(self):
 
@@ -581,16 +592,6 @@ class TestRollingTS:
 
         result = r.quantile(0.5)
         expected = er.quantile(0.5)
-        tm.assert_frame_equal(result, expected)
-
-    def test_all_apply(self, raw):
-
-        df = self.regular * 2
-        er = df.rolling(window=1)
-        r = df.rolling(window="1s")
-
-        result = r.apply(lambda x: 1, raw=raw)
-        expected = er.apply(lambda x: 1, raw=raw)
         tm.assert_frame_equal(result, expected)
 
     def test_all2(self):
@@ -708,20 +709,25 @@ class TestRollingTS:
         tm.assert_series_equal(result, expected2)
 
     def test_rolling_on_decreasing_index(self):
-        # GH-19248
+        # GH-19248, GH-32385
         index = [
-            Timestamp("20190101 09:00:00"),
-            Timestamp("20190101 09:00:02"),
-            Timestamp("20190101 09:00:03"),
-            Timestamp("20190101 09:00:05"),
-            Timestamp("20190101 09:00:06"),
+            Timestamp("20190101 09:00:30"),
+            Timestamp("20190101 09:00:27"),
+            Timestamp("20190101 09:00:20"),
+            Timestamp("20190101 09:00:18"),
+            Timestamp("20190101 09:00:10"),
         ]
 
-        df = DataFrame({"column": [3, 4, 4, 2, 1]}, index=reversed(index))
-        result = df.rolling("2s").min()
-        expected = DataFrame(
-            {"column": [3.0, 3.0, 3.0, 2.0, 1.0]}, index=reversed(index)
-        )
+        df = DataFrame({"column": [3, 4, 4, 5, 6]}, index=index)
+        result = df.rolling("5s").min()
+        expected = DataFrame({"column": [3.0, 3.0, 4.0, 4.0, 6.0]}, index=index)
+        tm.assert_frame_equal(result, expected)
+
+    def test_rolling_on_empty(self):
+        # GH-32385
+        df = DataFrame({"column": []}, index=[])
+        result = df.rolling("5s").min()
+        expected = DataFrame({"column": []}, index=[])
         tm.assert_frame_equal(result, expected)
 
     def test_rolling_on_multi_index_level(self):

@@ -22,6 +22,8 @@ from pandas._libs.algos cimport (swap, TiebreakEnumType, TIEBREAK_AVERAGE,
 from pandas._libs.algos import (take_2d_axis1_float64_float64,
                                 groupsort_indexer, tiebreakers)
 
+from pandas._libs.missing cimport checknull
+
 cdef int64_t NPY_NAT = get_nat()
 _int64_max = np.iinfo(np.int64).max
 
@@ -175,7 +177,6 @@ def group_cumprod_float64(float64_t[:, :] out,
     -----
     This method modifies the `out` parameter, rather than returning an object.
     """
-
     cdef:
         Py_ssize_t i, j, N, K, size
         float64_t val
@@ -233,7 +234,6 @@ def group_cumsum(numeric[:, :] out,
     -----
     This method modifies the `out` parameter, rather than returning an object.
     """
-
     cdef:
         Py_ssize_t i, j, N, K, size
         numeric val
@@ -688,8 +688,7 @@ def _group_ohlc(floating[:, :] out,
         raise ValueError('Output array must have 4 columns')
 
     if K > 1:
-        raise NotImplementedError("Argument 'values' must have only "
-                                  "one dimension")
+        raise NotImplementedError("Argument 'values' must have only one dimension")
     out[:] = np.nan
 
     with nogil:
@@ -793,7 +792,7 @@ def group_quantile(ndarray[float64_t] out,
                 out[i] = NaN
             else:
                 # Calculate where to retrieve the desired value
-                # Casting to int will intentionaly truncate result
+                # Casting to int will intentionally truncate result
                 idx = grp_start + <int64_t>(q * <float64_t>(non_na_sz - 1))
 
                 val = values[sort_arr[idx]]
@@ -890,7 +889,7 @@ def group_last(rank_t[:, :] out,
             for j in range(K):
                 val = values[i, j]
 
-                if val == val:
+                if not checknull(val):
                     # NB: use _treat_as_na here once
                     #  conditional-nogil is available.
                     nobs[lab, j] += 1
@@ -979,7 +978,7 @@ def group_nth(rank_t[:, :] out,
             for j in range(K):
                 val = values[i, j]
 
-                if val == val:
+                if not checknull(val):
                     # NB: use _treat_as_na here once
                     #  conditional-nogil is available.
                     nobs[lab, j] += 1
@@ -1146,7 +1145,7 @@ def group_rank(float64_t[:, :] out,
             # Update out only when there is a transition of values or labels.
             # When a new value or group is encountered, go back #dups steps(
             # the number of occurrence of current value) and assign the ranks
-            # based on the the starting index of the current group (grp_start)
+            # based on the starting index of the current group (grp_start)
             # and the current index
             if (i == N - 1 or
                     (masked_vals[_as[i]] != masked_vals[_as[i+1]]) or
@@ -1404,7 +1403,6 @@ def group_cummin(groupby_t[:, :] out,
     -----
     This method modifies the `out` parameter, rather than returning an object.
     """
-
     cdef:
         Py_ssize_t i, j, N, K, size
         groupby_t val, mval
@@ -1465,7 +1463,6 @@ def group_cummax(groupby_t[:, :] out,
     -----
     This method modifies the `out` parameter, rather than returning an object.
     """
-
     cdef:
         Py_ssize_t i, j, N, K, size
         groupby_t val, mval

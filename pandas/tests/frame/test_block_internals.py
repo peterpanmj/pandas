@@ -15,10 +15,10 @@ from pandas import (
     date_range,
     option_context,
 )
+import pandas._testing as tm
 from pandas.core.arrays import IntervalArray, integer_array
 from pandas.core.internals import ObjectBlock
 from pandas.core.internals.blocks import IntBlock
-import pandas.util.testing as tm
 
 # Segregated collection of methods that require the BlockManager internal data
 # structure
@@ -313,10 +313,7 @@ class TestDataFrameBlockInternals:
         column = df.columns[0]
 
         # use the default copy=True, change a column
-
-        # deprecated 0.21.0
-        with tm.assert_produces_warning(FutureWarning, check_stacklevel=False):
-            blocks = df.as_blocks()
+        blocks = df._to_dict_of_blocks(copy=True)
         for dtype, _df in blocks.items():
             if column in _df:
                 _df.loc[:, column] = _df[column] + 1
@@ -330,10 +327,7 @@ class TestDataFrameBlockInternals:
         column = df.columns[0]
 
         # use the copy=False, change a column
-
-        # deprecated 0.21.0
-        with tm.assert_produces_warning(FutureWarning, check_stacklevel=False):
-            blocks = df.as_blocks(copy=False)
+        blocks = df._to_dict_of_blocks(copy=False)
         for dtype, _df in blocks.items():
             if column in _df:
                 _df.loc[:, column] = _df[column] + 1
@@ -370,14 +364,14 @@ class TestDataFrameBlockInternals:
     def test_consolidate_datetime64(self):
         # numpy vstack bug
 
-        data = """\
-starting,ending,measure
-2012-06-21 00:00,2012-06-23 07:00,77
-2012-06-23 07:00,2012-06-23 16:30,65
-2012-06-23 16:30,2012-06-25 08:00,77
-2012-06-25 08:00,2012-06-26 12:00,0
-2012-06-26 12:00,2012-06-27 08:00,77
-"""
+        data = (
+            "starting,ending,measure\n"
+            "2012-06-21 00:00,2012-06-23 07:00,77\n"
+            "2012-06-23 07:00,2012-06-23 16:30,65\n"
+            "2012-06-23 16:30,2012-06-25 08:00,77\n"
+            "2012-06-25 08:00,2012-06-26 12:00,0\n"
+            "2012-06-26 12:00,2012-06-27 08:00,77\n"
+        )
         df = pd.read_csv(StringIO(data), parse_dates=[0, 1])
 
         ser_starting = df.starting
@@ -403,9 +397,6 @@ starting,ending,measure
         assert float_string_frame._is_mixed_type
 
     def test_get_numeric_data(self):
-        # TODO(wesm): unused?
-        intname = np.dtype(np.int_).name  # noqa
-        floatname = np.dtype(np.float_).name  # noqa
 
         datetime64name = np.dtype("M8[ns]").name
         objectname = np.dtype(np.object_).name
@@ -487,7 +478,7 @@ starting,ending,measure
         length = len(float_string_frame)
         float_string_frame["J"] = "1."
         float_string_frame["K"] = "1"
-        float_string_frame.loc[0:5, ["J", "K"]] = "garbled"
+        float_string_frame.loc[float_string_frame.index[0:5], ["J", "K"]] = "garbled"
         converted = float_string_frame._convert(datetime=True, numeric=True)
         assert converted["H"].dtype == "float64"
         assert converted["I"].dtype == "int64"
@@ -587,14 +578,11 @@ starting,ending,measure
         tm.assert_index_equal(df._get_numeric_data().columns, pd.Index(["a", "b", "e"]))
 
     def test_strange_column_corruption_issue(self):
+        # FIXME: dont leave commented-out
         # (wesm) Unclear how exactly this is related to internal matters
         df = DataFrame(index=[0, 1])
         df[0] = np.nan
         wasCol = {}
-        # uncommenting these makes the results match
-        # for col in xrange(100, 200):
-        #    wasCol[col] = 1
-        #    df[col] = np.nan
 
         for i, dt in enumerate(df.index):
             for col in range(100, 200):
@@ -621,12 +609,12 @@ starting,ending,measure
     def test_add_column_with_pandas_array(self):
         # GH 26390
         df = pd.DataFrame({"a": [1, 2, 3, 4], "b": ["a", "b", "c", "d"]})
-        df["c"] = pd.array([1, 2, None, 3])
+        df["c"] = pd.arrays.PandasArray(np.array([1, 2, None, 3], dtype=object))
         df2 = pd.DataFrame(
             {
                 "a": [1, 2, 3, 4],
                 "b": ["a", "b", "c", "d"],
-                "c": pd.array([1, 2, None, 3]),
+                "c": pd.arrays.PandasArray(np.array([1, 2, None, 3], dtype=object)),
             }
         )
         assert type(df["c"]._data.blocks[0]) == ObjectBlock

@@ -54,7 +54,7 @@ cdef class BlockPlacement:
         else:
             v = self._as_array
 
-        return f'{self.__class__.__name__}({v})'
+        return f'{type(self).__name__}({v})'
 
     def __repr__(self) -> str:
         return str(self)
@@ -96,7 +96,7 @@ cdef class BlockPlacement:
             return self._as_array
 
     def isin(self, arr):
-        from pandas.core.index import Int64Index
+        from pandas.core.indexes.api import Int64Index
         return Int64Index(self.as_array, copy=False).isin(arr)
 
     @property
@@ -105,8 +105,7 @@ cdef class BlockPlacement:
             Py_ssize_t start, stop, end, _
         if not self._has_array:
             start, stop, step, _ = slice_get_indices_ex(self._as_slice)
-            self._as_array = np.arange(start, stop, step,
-                                       dtype=np.int64)
+            self._as_array = np.arange(start, stop, step, dtype=np.int64)
             self._has_array = True
         return self._as_array
 
@@ -243,7 +242,6 @@ cpdef Py_ssize_t slice_len(
     - if ``s.step < 0``, ``s.start`` is not ``None``
 
     Otherwise, the result is unreliable.
-
     """
     cdef:
         Py_ssize_t start, stop, step, length
@@ -263,7 +261,6 @@ cdef slice_get_indices_ex(slice slc, Py_ssize_t objlen=PY_SSIZE_T_MAX):
 
     If `objlen` is not specified, slice must be bounded, otherwise the result
     will be wrong.
-
     """
     cdef:
         Py_ssize_t start, stop, step, length
@@ -285,8 +282,7 @@ cdef slice_getitem(slice slc, ind):
     s_start, s_stop, s_step, s_len = slice_get_indices_ex(slc)
 
     if isinstance(ind, slice):
-        ind_start, ind_stop, ind_step, ind_len = slice_get_indices_ex(ind,
-                                                                      s_len)
+        ind_start, ind_stop, ind_step, ind_len = slice_get_indices_ex(ind, s_len)
 
         if ind_step > 0 and ind_len == s_len:
             # short-cut for no-op slice
@@ -365,7 +361,6 @@ def get_blkno_indexers(int64_t[:] blknos, bint group=True):
     Returns
     -------
     iter : iterator of (int, slice or array)
-
     """
     # There's blkno in this function's name because it's used in block &
     # blockno handling.
@@ -436,18 +431,16 @@ def get_blkno_indexers(int64_t[:] blknos, bint group=True):
 
 def get_blkno_placements(blknos, group: bool = True):
     """
-
     Parameters
     ----------
     blknos : array of int64
-    group : bool
+    group : bool, default True
 
     Returns
     -------
     iterator
         yield (BlockPlacement, blkno)
     """
-
     blknos = ensure_int64(blknos)
 
     for blkno, indexer in get_blkno_indexers(blknos, group):

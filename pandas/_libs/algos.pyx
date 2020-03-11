@@ -7,13 +7,30 @@ from libc.math cimport fabs, sqrt
 
 import numpy as np
 cimport numpy as cnp
-from numpy cimport (ndarray,
-                    NPY_INT64, NPY_INT32, NPY_INT16, NPY_INT8,
-                    NPY_UINT64, NPY_UINT32, NPY_UINT16, NPY_UINT8,
-                    NPY_FLOAT32, NPY_FLOAT64,
-                    NPY_OBJECT,
-                    int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t,
-                    uint32_t, uint64_t, float32_t, float64_t)
+from numpy cimport (
+    NPY_FLOAT32,
+    NPY_FLOAT64,
+    NPY_INT8,
+    NPY_INT16,
+    NPY_INT32,
+    NPY_INT64,
+    NPY_OBJECT,
+    NPY_UINT8,
+    NPY_UINT16,
+    NPY_UINT32,
+    NPY_UINT64,
+    float32_t,
+    float64_t,
+    int8_t,
+    int16_t,
+    int32_t,
+    int64_t,
+    ndarray,
+    uint8_t,
+    uint16_t,
+    uint32_t,
+    uint64_t,
+)
 cnp.import_array()
 
 
@@ -49,8 +66,9 @@ cdef inline bint are_diff(object left, object right):
 
 
 class Infinity:
-    """ provide a positive Infinity comparison method for ranking """
-
+    """
+    Provide a positive Infinity comparison method for ranking.
+    """
     __lt__ = lambda self, other: False
     __le__ = lambda self, other: isinstance(other, Infinity)
     __eq__ = lambda self, other: isinstance(other, Infinity)
@@ -61,8 +79,9 @@ class Infinity:
 
 
 class NegInfinity:
-    """ provide a negative Infinity comparison method for ranking """
-
+    """
+    Provide a negative Infinity comparison method for ranking.
+    """
     __lt__ = lambda self, other: (not isinstance(other, NegInfinity) and
                                   not missing.checknull(other))
     __le__ = lambda self, other: not missing.checknull(other)
@@ -158,20 +177,19 @@ def groupsort_indexer(const int64_t[:] index, Py_ssize_t ngroups):
     Parameters
     ----------
     index: int64 ndarray
-        mappings from group -> position
+        Mappings from group -> position.
     ngroups: int64
-        number of groups
+        Number of groups.
 
     Returns
     -------
     tuple
-        1-d indexer ordered by groups, group counts
+        1-d indexer ordered by groups, group counts.
 
     Notes
     -----
     This is a reverse of the label factorization process.
     """
-
     cdef:
         Py_ssize_t i, loc, label, n
         ndarray[int64_t] counts, where, result
@@ -679,7 +697,9 @@ def is_monotonic(ndarray[algos_t, ndim=1] arr, bint timelike):
     Returns
     -------
     tuple
-        is_monotonic_inc, is_monotonic_dec, is_unique
+        is_monotonic_inc : bool
+        is_monotonic_dec : bool
+        is_unique : bool
     """
     cdef:
         Py_ssize_t i, n
@@ -774,9 +794,8 @@ ctypedef fused rank_t:
 def rank_1d(rank_t[:] in_arr, ties_method='average',
             ascending=True, na_option='keep', pct=False):
     """
-    Fast NaN-friendly version of scipy.stats.rankdata
+    Fast NaN-friendly version of ``scipy.stats.rankdata``.
     """
-
     cdef:
         Py_ssize_t i, j, n, dups = 0, total_tie_count = 0, non_na_idx = 0
 
@@ -912,8 +931,7 @@ def rank_1d(rank_t[:] in_arr, ties_method='average',
                         ranks[argsorted[j]] = i + 1
                 elif tiebreak == TIEBREAK_FIRST:
                     if rank_t is object:
-                        raise ValueError('first not supported for '
-                                         'non-numeric data')
+                        raise ValueError('first not supported for non-numeric data')
                     else:
                         for j in range(i - dups + 1, i + 1):
                             ranks[argsorted[j]] = j + 1
@@ -969,8 +987,7 @@ def rank_1d(rank_t[:] in_arr, ties_method='average',
                             ranks[argsorted[j]] = i + 1
                     elif tiebreak == TIEBREAK_FIRST:
                         if rank_t is object:
-                            raise ValueError('first not supported for '
-                                             'non-numeric data')
+                            raise ValueError('first not supported for non-numeric data')
                         else:
                             for j in range(i - dups + 1, i + 1):
                                 ranks[argsorted[j]] = j + 1
@@ -995,9 +1012,8 @@ def rank_1d(rank_t[:] in_arr, ties_method='average',
 def rank_2d(rank_t[:, :] in_arr, axis=0, ties_method='average',
             ascending=True, na_option='keep', pct=False):
     """
-    Fast NaN-friendly version of scipy.stats.rankdata
+    Fast NaN-friendly version of ``scipy.stats.rankdata``.
     """
-
     cdef:
         Py_ssize_t i, j, z, k, n, dups = 0, total_tie_count = 0
 
@@ -1136,8 +1152,7 @@ def rank_2d(rank_t[:, :] in_arr, axis=0, ties_method='average',
                         ranks[i, argsorted[i, z]] = j + 1
                 elif tiebreak == TIEBREAK_FIRST:
                     if rank_t is object:
-                        raise ValueError('first not supported '
-                                         'for non-numeric data')
+                        raise ValueError('first not supported for non-numeric data')
                     else:
                         for z in range(j - dups + 1, j + 1):
                             ranks[i, argsorted[i, z]] = z + 1
@@ -1175,12 +1190,12 @@ ctypedef fused out_t:
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def diff_2d(ndarray[diff_t, ndim=2] arr,
-            ndarray[out_t, ndim=2] out,
+def diff_2d(diff_t[:, :] arr,
+            out_t[:, :] out,
             Py_ssize_t periods, int axis):
     cdef:
         Py_ssize_t i, j, sx, sy, start, stop
-        bint f_contig = arr.flags.f_contiguous
+        bint f_contig = arr.is_f_contig()
 
     # Disable for unsupported dtype combinations,
     #  see https://github.com/cython/cython/issues/2646

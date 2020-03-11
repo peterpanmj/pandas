@@ -9,6 +9,7 @@ import itertools
 import pprint
 import struct
 import sys
+from typing import List
 
 import numpy as np
 
@@ -30,7 +31,8 @@ def ensure_scope(
 
 
 def _replacer(x) -> str:
-    """Replace a number with its hexadecimal representation. Used to tag
+    """
+    Replace a number with its hexadecimal representation. Used to tag
     temporary variables with their calling scope's id.
     """
     # get the hex repr of the binary char and remove 0x and pad by pad_size
@@ -142,10 +144,8 @@ class Scope:
     def __repr__(self) -> str:
         scope_keys = _get_pretty_string(list(self.scope.keys()))
         res_keys = _get_pretty_string(list(self.resolvers.keys()))
-        unicode_str = "{name}(scope={scope_keys}, resolvers={res_keys})"
-        return unicode_str.format(
-            name=type(self).__name__, scope_keys=scope_keys, res_keys=res_keys
-        )
+        unicode_str = f"{type(self).__name__}(scope={scope_keys}, resolvers={res_keys})"
+        return unicode_str
 
     @property
     def has_resolvers(self) -> bool:
@@ -161,7 +161,7 @@ class Scope:
         """
         return bool(len(self.resolvers))
 
-    def resolve(self, key, is_local):
+    def resolve(self, key: str, is_local: bool):
         """
         Resolve a variable name in a possibly local context.
 
@@ -197,13 +197,13 @@ class Scope:
                 # these are created when parsing indexing expressions
                 # e.g., df[df > 0]
                 return self.temps[key]
-            except KeyError:
+            except KeyError as err:
                 # runtime import because ops imports from scope
                 from pandas.core.computation.ops import UndefinedVariableError
 
-                raise UndefinedVariableError(key, is_local)
+                raise UndefinedVariableError(key, is_local) from err
 
-    def swapkey(self, old_key, new_key, new_value=None):
+    def swapkey(self, old_key: str, new_key: str, new_value=None):
         """
         Replace a variable name, with a potentially new value.
 
@@ -228,7 +228,7 @@ class Scope:
                 mapping[new_key] = new_value
                 return
 
-    def _get_vars(self, stack, scopes):
+    def _get_vars(self, stack, scopes: List[str]):
         """
         Get specifically scoped variables from a list of stack frames.
 
@@ -285,9 +285,7 @@ class Scope:
         str
             The name of the temporary variable created.
         """
-        name = "{name}_{num}_{hex_id}".format(
-            name=type(value).__name__, num=self.ntemps, hex_id=_raw_hex_id(self)
-        )
+        name = f"{type(value).__name__}_{self.ntemps}_{_raw_hex_id(self)}"
 
         # add to inner most scope
         assert name not in self.temps

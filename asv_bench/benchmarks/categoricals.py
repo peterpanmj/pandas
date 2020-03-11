@@ -3,7 +3,8 @@ import warnings
 import numpy as np
 
 import pandas as pd
-import pandas.util.testing as tm
+
+from .pandas_vb_common import tm
 
 try:
     from pandas.api.types import union_categoricals
@@ -12,21 +13,6 @@ except ImportError:
         from pandas.types.concat import union_categoricals
     except ImportError:
         pass
-
-
-class Concat:
-    def setup(self):
-        N = 10 ** 5
-        self.s = pd.Series(list("aabbcd") * N).astype("category")
-
-        self.a = pd.Categorical(list("aabbcd") * N)
-        self.b = pd.Categorical(list("bbcdjk") * N)
-
-    def time_concat(self):
-        pd.concat([self.s, self.s])
-
-    def time_union(self):
-        union_categoricals([self.a, self.b])
 
 
 class Constructor:
@@ -75,6 +61,21 @@ class Constructor:
 
     def time_existing_series(self):
         pd.Categorical(self.series)
+
+
+class Concat:
+    def setup(self):
+        N = 10 ** 5
+        self.s = pd.Series(list("aabbcd") * N).astype("category")
+
+        self.a = pd.Categorical(list("aabbcd") * N)
+        self.b = pd.Categorical(list("bbcdjk") * N)
+
+    def time_concat(self):
+        pd.concat([self.s, self.s])
+
+    def time_union(self):
+        union_categoricals([self.a, self.b])
 
 
 class ValueCounts:
@@ -256,9 +257,6 @@ class Indexing:
 
     def time_get_loc(self):
         self.index.get_loc(self.category)
-
-    def time_shape(self):
-        self.index.shape
 
     def time_shallow_copy(self):
         self.index._shallow_copy()
